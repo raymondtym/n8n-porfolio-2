@@ -1,0 +1,162 @@
+<!-- Only include these 3 loader tags once per page. Skip them if the first diagram is already on the page. -->
+<script src="https://cdn.jsdelivr.net/npm/@webcomponents/webcomponentsjs@2.0.0/webcomponents-loader.js"></script>
+<script src="https://www.unpkg.com/lit@2.0.0-rc.2/polyfill-support.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@n8n_io/n8n-demo-component/n8n-demo.bundled.js"></script>
+
+<div id="n8n-wrap-2" style="width:100%;min-height:600px"></div>
+
+<script type="application/json" id="wf-json-2">
+{
+  "name": "Lead Qualification - Ice Cube Marketing SG",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify the lead based on fullname, email, and message.\n\nFull Name:\n{{ $json.body.full_name }}\n\nEmail:\n{{ $json.body.email }}\n\nMessage:\n{{ $json.body.Message }}\n\nYour goal is to protect genuine leads. Since every lead has a cost, DO NOT disqualify a lead based on weak or uncertain signals.\n\nCLASSIFICATION:\n\n1. QUALIFIED\n   Use when there is reasonable evidence that the person is a genuine prospect interested in marketing services, even if the information is incomplete.\n\n2. TBD\n   Use when the lead looks suspicious, unusual, incomplete, or potentially spam, BUT there is still a reasonable possibility that it is a genuine inquiry.\n\nExamples:\n* Very short or vague message\n* Unusual name or email\n* Empty message\n* Empty email\n* Name/email contains \"test\", \"testing\", \"demo\", etc.\n* Message is unclear but could be a genuine inquiry\n* Possible spam but intent cannot be confirmed\n\n3. DISQUALIFIED\n   Use ONLY when there is clear evidence that the lead is NOT a genuine prospect.\n\nExamples:\n* Clearly looking for a job/employment\n* Clearly promoting or selling their own services\n* Obvious spam/scam\n* Clearly unrelated inquiry\n* Clearly offensive or abusive content\n* Obviously fake/gibberish information combined with clear spam indicators\n\nIMPORTANT RULES:\n* \"Test\", \"testing\", \"demo\", etc. alone is NOT a reason to disqualify.\n* Empty email or message alone is NOT a reason to disqualify.\n* Do not assume unusual names or emails are fake.\n* Do not disqualify based on a single suspicious keyword.\n* Consider the overall context of the lead.\n* If uncertain between QUALIFIED and DISQUALIFIED, choose TBD.\n* If there is not enough information to determine intent, choose TBD.\n* Only use DISQUALIFIED when there is strong evidence the lead is invalid.\n\nOutput ONLY one of these formats:\nStatus: QUALIFIED or TBD or DISQUALIFIED\nReason: reason here\n",
+        "hasOutputParser": true,
+        "options": { "systemMessage": "" }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [128, 48],
+      "id": "c37651d8-a90b-4928-9159-ad35bd810090",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": {} },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [128, 288],
+      "id": "d55dd60c-54cf-4dff-8954-183664b403bc",
+      "name": "Google Gemini Chat Model"
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "lead-qualification", "options": {} },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-96, 48],
+      "id": "02f20a18-83f3-4024-9414-1d7feb76a3c0",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "email": "={{ $('Webhook').item.json.body.email }}",
+        "phone": "={{ $('Webhook').item.json.body.phone }}",
+        "additionalFields": {
+          "customFields": { "values": [ {
+            "fieldId": { "__rl": true, "value": "FIELD_ID", "mode": "list", "cachedResultName": "Lead Qualification Status" },
+            "fieldValue": "={{ $('AI Agent').item.json.output }}"
+          } ] },
+          "notes": "={{ $('AI Agent').item.json.output }}",
+          "tags": "disqualify lead"
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.highLevel",
+      "typeVersion": 2,
+      "position": [704, 240],
+      "id": "a2102dae-14dc-45b2-bd35-d960c9f7318d",
+      "name": "update lead as disqualified"
+    },
+    {
+      "parameters": {
+        "email": "={{ $('Webhook').item.json.body.email }}",
+        "phone": "={{ $('Webhook').item.json.body.phone }}",
+        "additionalFields": {
+          "customFields": { "values": [ {
+            "fieldId": { "__rl": true, "value": "FIELD_ID", "mode": "list", "cachedResultName": "Lead Qualification Status" },
+            "fieldValue": "={{ $('AI Agent').item.json.output }}"
+          } ] },
+          "notes": "={{ $('AI Agent').item.json.output }}"
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.highLevel",
+      "typeVersion": 2,
+      "position": [704, -144],
+      "id": "e80ba8a9-5e75-4149-b041-abf2e4c01897",
+      "name": "update lead as qualified"
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          {
+            "conditions": {
+              "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+              "conditions": [ { "leftValue": "={{ $json.output }}", "rightValue": "=Status: QUALIFIED", "operator": { "type": "string", "operation": "contains" }, "id": "12efc8a0-b668-4744-b5fb-fc9b58c58858" } ],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "QUALIFIED"
+          },
+          {
+            "conditions": {
+              "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+              "conditions": [ { "id": "077fae95-349f-4c7f-914e-37cbb64c2a39", "leftValue": "={{ $json.output }}", "rightValue": "Status: TBD", "operator": { "type": "string", "operation": "contains" } } ],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "TBD"
+          },
+          {
+            "conditions": {
+              "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+              "conditions": [ { "id": "1edaf33a-9b30-4337-a75d-df2a7f3fc3ef", "leftValue": "={{ $json.output }}", "rightValue": "Status: DISQUALIFIED", "operator": { "type": "string", "operation": "contains" } } ],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "DISQUALIFIED"
+          }
+        ] },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [480, 32],
+      "id": "89d6d2ca-d724-4591-ade6-9f29596ce5af",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "email": "={{ $('Webhook').item.json.body.email }}",
+        "phone": "={{ $('Webhook').item.json.body.phone }}",
+        "additionalFields": {
+          "customFields": { "values": [ {
+            "fieldId": { "__rl": true, "value": "FIELD_ID", "mode": "list", "cachedResultName": "Lead Qualification Status" },
+            "fieldValue": "={{ $('AI Agent').item.json.output }}"
+          } ] },
+          "notes": "={{ $('AI Agent').item.json.output }}"
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.highLevel",
+      "typeVersion": 2,
+      "position": [704, 48],
+      "id": "5ead0c13-8df4-4578-af44-98e3c7f9f05d",
+      "name": "update lead as TBD"
+    }
+  ],
+  "connections": {
+    "Google Gemini Chat Model": { "ai_languageModel": [ [ { "node": "AI Agent", "type": "ai_languageModel", "index": 0 } ] ] },
+    "Webhook": { "main": [ [ { "node": "AI Agent", "type": "main", "index": 0 } ] ] },
+    "AI Agent": { "main": [ [ { "node": "Switch", "type": "main", "index": 0 } ] ] },
+    "Switch": { "main": [
+      [ { "node": "update lead as qualified", "type": "main", "index": 0 } ],
+      [ { "node": "update lead as TBD", "type": "main", "index": 0 } ],
+      [ { "node": "update lead as disqualified", "type": "main", "index": 0 } ]
+    ] }
+  },
+  "pinData": {}
+}
+</script>
+
+<script>
+(function () {
+  var el = document.createElement('n8n-demo');
+  el.setAttribute('workflow', document.getElementById('wf-json-2').textContent.trim());
+  el.setAttribute('frame', 'true');
+  el.setAttribute('theme', 'dark');
+  el.setAttribute('clicktointeract', 'true');
+  document.getElementById('n8n-wrap-2').appendChild(el);
+})();
+</script>
